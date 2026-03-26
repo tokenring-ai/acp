@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "description": "ACP (Agent Client Protocol) integration for TokenRing agents",
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.16.1",
+    "@agentclientprotocol/sdk": "^0.17.0",
     "@tokenring-ai/agent": "0.2.0",
     "@tokenring-ai/app": "0.2.0",
     "@tokenring-ai/filesystem": "0.2.0",
@@ -23,8 +23,8 @@
     "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.0"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.1"
   },
   "type": "module"
 }
