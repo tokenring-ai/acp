@@ -20,7 +20,6 @@ import {
   PROTOCOL_VERSION,
   RequestError,
   type SessionInfo,
-  TerminalHandle,
 } from "@agentclientprotocol/sdk";
 import type TokenRingAgent from "@tokenring-ai/agent/Agent";
 import type {AgentEventEnvelope, InputAttachment} from "@tokenring-ai/agent/AgentEvents";
@@ -29,14 +28,14 @@ import AgentManager from "@tokenring-ai/agent/services/AgentManager";
 import {AgentEventState} from "@tokenring-ai/agent/state/agentEventState";
 import TokenRingApp from "@tokenring-ai/app";
 import type {TokenRingService} from "@tokenring-ai/app/types";
+import FileSystemService from "@tokenring-ai/filesystem/FileSystemService";
+import TerminalService from "@tokenring-ai/terminal/TerminalService";
 import {randomUUID} from "node:crypto";
 import path from "node:path";
 import process from "node:process";
 import {Readable, Writable} from "node:stream";
-import {setTimeout as delay} from "node:timers/promises";
-import type FileSystemService from "../filesystem/FileSystemService.ts";
-import type {ExecuteCommandOptions, ExecuteCommandResult} from "../terminal/TerminalProvider.ts";
-import type TerminalService from "../terminal/TerminalService.ts";
+import ACPFileSystemProvider from "./ACPFileSystemProvider.ts";
+import ACPTerminalProvider from "./ACPTerminalProvider.ts";
 import packageJSON from "./package.json" with {type: "json"};
 import type {ACPConfig} from "./schema.ts";
 
@@ -50,13 +49,9 @@ type ACPSession = {
   agent: TokenRingAgent;
   activePrompt: ACPPromptState | null;
   updatedAt: string;
-};
-
-type ACPManagedTerminal = {
-  agentId: string;
-  handle: TerminalHandle;
-  sessionId: string;
-  terminalId: string;
+  fileSystemProviderName?: string;
+  terminalProvider?: ACPTerminalProvider;
+  terminalProviderName?: string;
 };
 
 type StreamMessageIds = {
@@ -69,29 +64,6 @@ type ACPAgentConfig = ParsedAgentConfig & {
   terminal?: Record<string, unknown>;
 };
 
-type FileSystemStateLike = {
-  workingDirectory: string;
-};
-
-type TerminalSessionStateLike = {
-  id: string;
-  command: string;
-  lastPosition: number;
-  startTime: number;
-  running: boolean;
-};
-
-type TerminalStateLike = {
-  workingDirectory: string;
-  bash: {
-    cropOutput: number;
-  };
-  getSession(id: string): TerminalSessionStateLike | undefined;
-  registerSession(id: string, command: string): void;
-  updateSessionPosition(id: string, position: number): void;
-  removeSession(id: string): void;
-};
-
 export default class ACPService implements TokenRingService {
   readonly name = "ACPService";
   description = "ACP (Agent Client Protocol) server for TokenRing agents";
@@ -100,8 +72,6 @@ export default class ACPService implements TokenRingService {
   private clientCapabilities: ClientCapabilities = {};
   private readonly sessions = new Map<string, ACPSession>();
   private readonly sessionsByAgentId = new Map<string, ACPSession>();
-  private readonly terminalHandles = new Map<string, ACPManagedTerminal>();
-  private servicesPatched = false;
 
   constructor(
     private readonly app: TokenRingApp,
@@ -121,8 +91,6 @@ export default class ACPService implements TokenRingService {
       (connection) => new TokenRingACPAgent(connection, this),
       stream,
     );
-
-    this.patchServices();
   }
 
   async run(signal: AbortSignal): Promise<void> {
@@ -210,6 +178,7 @@ export default class ACPService implements TokenRingService {
     };
 
     this.decorateAgent(session);
+    this.configureSessionProviders(session);
     this.sessions.set(sessionId, session);
     this.sessionsByAgentId.set(agent.id, session);
 
@@ -480,6 +449,33 @@ export default class ACPService implements TokenRingService {
     }) as TokenRingAgent["askQuestion"];
   }
 
+  private configureSessionProviders(session: ACPSession): void {
+    if (!this.connection) {
+      return;
+    }
+
+    const fileSystemService = this.app.getService(FileSystemService);
+    if (fileSystemService && (this.clientCapabilities.fs?.readTextFile || this.clientCapabilities.fs?.writeTextFile)) {
+      const providerName = `acp-fs-${session.sessionId}`;
+      fileSystemService.registerFileSystemProvider(
+        providerName,
+        new ACPFileSystemProvider(this.connection, session.sessionId, this.clientCapabilities),
+      );
+      fileSystemService.setActiveFileSystem(providerName, session.agent);
+      session.fileSystemProviderName = providerName;
+    }
+
+    const terminalService = this.app.getService(TerminalService);
+    if (terminalService && this.clientCapabilities.terminal) {
+      const providerName = `acp-terminal-${session.sessionId}`;
+      const provider = new ACPTerminalProvider(this.connection, session.sessionId);
+      terminalService.registerTerminalProvider(providerName, provider);
+      terminalService.setActiveProvider(providerName, session.agent);
+      session.terminalProvider = provider;
+      session.terminalProviderName = providerName;
+    }
+  }
+
   private validateSessionCwd(cwd: string): string {
     if (!path.isAbsolute(cwd)) {
       throw RequestError.invalidParams({cwd}, "ACP session cwd must be an absolute path");
@@ -488,433 +484,10 @@ export default class ACPService implements TokenRingService {
     return path.resolve(cwd);
   }
 
-  private patchServices(): void {
-    if (this.servicesPatched) {
-      return;
-    }
-    this.servicesPatched = true;
-
-    this.patchFileSystemService();
-    this.patchTerminalService();
-  }
-
-  private patchFileSystemService(): void {
-    const fileSystemService = this.getServiceByName<FileSystemService>("FileSystemService");
-    if (!fileSystemService) {
-      return;
-    }
-
-    const originalReadTextFile = fileSystemService.readTextFile.bind(fileSystemService);
-    const originalReadFile = fileSystemService.readFile.bind(fileSystemService);
-    const originalWriteFile = fileSystemService.writeFile.bind(fileSystemService);
-    const originalAppendFile = fileSystemService.appendFile.bind(fileSystemService);
-
-    fileSystemService.readTextFile = async (filePath: string, agent: TokenRingAgent) => {
-      const session = this.getACPFileReadSession(agent);
-      if (!session) {
-        return originalReadTextFile(filePath, agent);
-      }
-
-      try {
-        const response = await this.connection!.readTextFile({
-          sessionId: session.sessionId,
-          path: this.resolveACPAbsoluteFilePath(filePath, agent),
-        });
-        return response.content;
-      } catch {
-        return originalReadTextFile(filePath, agent);
-      }
-    };
-
-    fileSystemService.readFile = async (filePath: string, agent: TokenRingAgent) => {
-      const session = this.getACPFileReadSession(agent);
-      if (!session) {
-        return originalReadFile(filePath, agent);
-      }
-
-      try {
-        const response = await this.connection!.readTextFile({
-          sessionId: session.sessionId,
-          path: this.resolveACPAbsoluteFilePath(filePath, agent),
-        });
-        return Buffer.from(response.content, "utf-8");
-      } catch {
-        return originalReadFile(filePath, agent);
-      }
-    };
-
-    fileSystemService.writeFile = async (
-      filePath: string,
-      content: string | Buffer,
-      agent: TokenRingAgent,
-    ) => {
-      const session = this.getACPFileWriteSession(agent);
-      const textContent = toACPTextContent(content);
-      if (!session || textContent === null) {
-        return originalWriteFile(filePath, content, agent);
-      }
-
-      try {
-        await this.connection!.writeTextFile({
-          sessionId: session.sessionId,
-          path: this.resolveACPAbsoluteFilePath(filePath, agent),
-          content: textContent,
-        });
-        return true;
-      } catch {
-        return originalWriteFile(filePath, content, agent);
-      }
-    };
-
-    fileSystemService.appendFile = async (
-      filePath: string,
-      content: string | Buffer,
-      agent: TokenRingAgent,
-    ) => {
-      const session = this.getACPFileReadWriteSession(agent);
-      const textContent = toACPTextContent(content);
-      if (!session || textContent === null) {
-        return originalAppendFile(filePath, content, agent);
-      }
-
-      try {
-        const absolutePath = this.resolveACPAbsoluteFilePath(filePath, agent);
-        const current = await this.connection!.readTextFile({
-          sessionId: session.sessionId,
-          path: absolutePath,
-        });
-
-        await this.connection!.writeTextFile({
-          sessionId: session.sessionId,
-          path: absolutePath,
-          content: `${current.content}${textContent}`,
-        });
-        return true;
-      } catch {
-        return originalAppendFile(filePath, content, agent);
-      }
-    };
-  }
-
-  private patchTerminalService(): void {
-    const terminalService = this.getServiceByName<TerminalService>("TerminalService");
-    if (!terminalService) {
-      return;
-    }
-
-    const originalExecuteCommand = terminalService.executeCommand.bind(terminalService);
-    const originalRunScript = terminalService.runScript.bind(terminalService);
-    const originalStartInteractiveSession = terminalService.startInteractiveSession.bind(terminalService);
-    const originalSendInputToSession = terminalService.sendInputToSession.bind(terminalService);
-    const originalTerminateSession = terminalService.terminateSession.bind(terminalService);
-    const originalRetrieveSessionOutput = terminalService.retrieveSessionOutput.bind(terminalService);
-    const originalGetCompleteSessionOutput = terminalService.getCompleteSessionOutput.bind(terminalService);
-
-    terminalService.executeCommand = async (
-      command: string,
-      args: string[],
-      options: Partial<ExecuteCommandOptions>,
-      agent: TokenRingAgent,
-    ) => {
-      const session = this.getACPTerminalSession(agent);
-      if (!session) {
-        return originalExecuteCommand(command, args, options, agent);
-      }
-
-      return this.runACPCommand(session, agent, command, args, options);
-    };
-
-    terminalService.runScript = async (
-      script: string,
-      options: Partial<ExecuteCommandOptions>,
-      agent: TokenRingAgent,
-    ) => {
-      const session = this.getACPTerminalSession(agent);
-      if (!session) {
-        return originalRunScript(script, options, agent);
-      }
-
-      const shell = process.env.SHELL || "/bin/bash";
-      return this.runACPCommand(session, agent, shell, ["-lc", script], options);
-    };
-
-    terminalService.startInteractiveSession = async (agent: TokenRingAgent, command: string) => {
-      const session = this.getACPTerminalSession(agent);
-      if (!session) {
-        return originalStartInteractiveSession(agent, command);
-      }
-
-      const shell = process.env.SHELL || "/bin/bash";
-      const handle = await this.connection!.createTerminal({
-        sessionId: session.sessionId,
-        command: shell,
-        args: ["-lc", command],
-        cwd: this.resolveACPTerminalWorkingDirectory(agent),
-      });
-
-      this.terminalHandles.set(handle.id, {
-        agentId: agent.id,
-        handle,
-        sessionId: session.sessionId,
-        terminalId: handle.id,
-      });
-
-      this.getTerminalState(agent).registerSession(handle.id, command);
-
-      return handle.id;
-    };
-
-    terminalService.sendInputToSession = async (
-      sessionId: string,
-      input: string,
-      agent: TokenRingAgent,
-    ) => {
-      const handle = this.getManagedTerminal(sessionId, agent);
-      if (!handle) {
-        return originalSendInputToSession(sessionId, input, agent);
-      }
-
-      if (input.trim()) {
-        throw new Error("ACP terminal sessions do not support stdin after creation");
-      }
-    };
-
-    terminalService.terminateSession = async (sessionId: string, agent: TokenRingAgent) => {
-      const handle = this.getManagedTerminal(sessionId, agent);
-      if (!handle) {
-        return originalTerminateSession(sessionId, agent);
-      }
-
-      await this.releaseManagedTerminal(handle, agent);
-    };
-
-    terminalService.retrieveSessionOutput = async (sessionId: string, agent: TokenRingAgent) => {
-      const handle = this.getManagedTerminal(sessionId, agent);
-      if (!handle) {
-        return originalRetrieveSessionOutput(sessionId, agent);
-      }
-
-      const output = await handle.handle.currentOutput();
-      const terminalState = this.getTerminalState(agent);
-      const sessionRecord = terminalState.getSession(sessionId);
-      if (!sessionRecord) {
-        throw new Error(`Session ${sessionId} not found`);
-      }
-
-      let fromPosition = sessionRecord.lastPosition;
-      if (output.truncated && fromPosition > output.output.length) {
-        fromPosition = 0;
-      }
-
-      let incrementalOutput = output.output.substring(fromPosition);
-      if (output.truncated && fromPosition === 0) {
-        incrementalOutput = `${incrementalOutput}\n[...Terminal output truncated by ACP client...]\n`;
-      }
-
-      const newPosition = output.output.length;
-      terminalState.updateSessionPosition(sessionId, newPosition);
-      const updatedSession = terminalState.getSession(sessionId);
-      if (updatedSession && output.exitStatus) {
-        updatedSession.running = false;
-      }
-
-      if (incrementalOutput.length > terminalState.bash.cropOutput) {
-        incrementalOutput =
-          `${incrementalOutput.substring(0, terminalState.bash.cropOutput)}\n[...Output truncated...]\n`;
-      }
-
-      return {
-        output: incrementalOutput,
-        position: newPosition,
-        complete: Boolean(output.exitStatus),
-      };
-    };
-
-    terminalService.getCompleteSessionOutput = async (sessionId: string, agent: TokenRingAgent) => {
-      const handle = this.getManagedTerminal(sessionId, agent);
-      if (!handle) {
-        return originalGetCompleteSessionOutput(sessionId, agent);
-      }
-
-      const output = await handle.handle.currentOutput();
-      return output.truncated
-        ? `${output.output}\n[...Terminal output truncated by ACP client...]\n`
-        : output.output;
-    };
-  }
-
-  private getSessionForAgent(agent: TokenRingAgent): ACPSession | null {
-    return this.sessionsByAgentId.get(agent.id) ?? null;
-  }
-
-  private getACPFileReadSession(agent: TokenRingAgent): ACPSession | null {
-    return this.connection && this.clientCapabilities.fs?.readTextFile
-      ? this.getSessionForAgent(agent)
-      : null;
-  }
-
-  private getACPFileWriteSession(agent: TokenRingAgent): ACPSession | null {
-    return this.connection && this.clientCapabilities.fs?.writeTextFile
-      ? this.getSessionForAgent(agent)
-      : null;
-  }
-
-  private getACPFileReadWriteSession(agent: TokenRingAgent): ACPSession | null {
-    return this.connection
-      && this.clientCapabilities.fs?.readTextFile
-      && this.clientCapabilities.fs?.writeTextFile
-      ? this.getSessionForAgent(agent)
-      : null;
-  }
-
-  private getACPTerminalSession(agent: TokenRingAgent): ACPSession | null {
-    return this.connection && this.clientCapabilities.terminal
-      ? this.getSessionForAgent(agent)
-      : null;
-  }
-
-  private getServiceByName<T extends TokenRingService>(name: string): T | null {
-    return this.app.getServices().find((service) => service.name === name) as T | undefined ?? null;
-  }
-
-  private requireStateByName<T>(agent: TokenRingAgent, stateName: string): T {
-    for (const slice of agent.stateManager.slices()) {
-      if (slice.name === stateName) {
-        return slice as T;
-      }
-    }
-
-    throw new Error(`State slice ${stateName} not found`);
-  }
-
-  private getFileSystemState(agent: TokenRingAgent): FileSystemStateLike {
-    return this.requireStateByName<FileSystemStateLike>(agent, "FileSystemState");
-  }
-
-  private getTerminalState(agent: TokenRingAgent): TerminalStateLike {
-    return this.requireStateByName<TerminalStateLike>(agent, "TerminalState");
-  }
-
-  private resolveACPAbsoluteFilePath(filePath: string, agent: TokenRingAgent): string {
-    const workingDirectory = this.getFileSystemState(agent).workingDirectory;
-    const absolutePath = path.isAbsolute(filePath)
-      ? path.normalize(filePath)
-      : path.resolve(workingDirectory, filePath);
-    const relativePath = path.relative(workingDirectory, absolutePath);
-
-    if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-      throw new Error(`Path ${filePath} is outside the root directory`);
-    }
-
-    return absolutePath;
-  }
-
-  private resolveACPTerminalWorkingDirectory(
-    agent: TokenRingAgent,
-    workingDirectory?: string,
-  ): string {
-    const agentWorkingDirectory = this.getTerminalState(agent).workingDirectory;
-    if (!workingDirectory) {
-      return agentWorkingDirectory;
-    }
-
-    return path.isAbsolute(workingDirectory)
-      ? path.normalize(workingDirectory)
-      : path.resolve(agentWorkingDirectory, workingDirectory);
-  }
-
-  private async runACPCommand(
-    session: ACPSession,
-    agent: TokenRingAgent,
-    command: string,
-    args: string[],
-    options: Partial<ExecuteCommandOptions>,
-  ): Promise<ExecuteCommandResult> {
-    const handle = await this.connection!.createTerminal({
-      sessionId: session.sessionId,
-      command,
-      ...(args.length > 0 && {args}),
-      cwd: this.resolveACPTerminalWorkingDirectory(agent, options.workingDirectory),
-      ...(options.env && {
-        env: Object.entries(options.env)
-          .filter(([, value]) => value !== undefined)
-          .map(([name, value]) => ({name, value: value!})),
-      }),
-    });
-
-    try {
-      const timeoutSeconds = options.timeoutSeconds ?? 120;
-      const exitResult = await Promise.race([
-        handle.waitForExit().then((result) => ({type: "exit" as const, result})),
-        delay(timeoutSeconds * 1000).then(() => ({type: "timeout" as const})),
-      ]);
-
-      if (exitResult.type === "timeout") {
-        await handle.kill().catch(() => undefined);
-        return {status: "timeout"};
-      }
-
-      const output = await handle.currentOutput();
-      const formattedOutput = output.truncated
-        ? `${output.output}\n[...Terminal output truncated by ACP client...]\n`
-        : output.output;
-      const exitCode = exitResult.result.exitCode ?? output.exitStatus?.exitCode ?? 1;
-
-      if (exitCode === 0 && !exitResult.result.signal) {
-        return {
-          status: "success",
-          output: formattedOutput,
-          exitCode: 0,
-        };
-      }
-
-      return {
-        status: "badExitCode",
-        output: formattedOutput,
-        exitCode,
-      };
-    } catch (error) {
-      return {
-        status: "unknownError",
-        error: (error as Error).message,
-      };
-    } finally {
-      await handle.release().catch(() => undefined);
-    }
-  }
-
-  private getManagedTerminal(sessionId: string, agent: TokenRingAgent): ACPManagedTerminal | null {
-    const handle = this.terminalHandles.get(sessionId);
-    if (!handle || handle.agentId !== agent.id) {
-      return null;
-    }
-    return handle;
-  }
-
-  private async releaseManagedTerminal(
-    terminal: ACPManagedTerminal,
-    agent?: TokenRingAgent,
-  ): Promise<void> {
-    this.terminalHandles.delete(terminal.terminalId);
-    await terminal.handle.release().catch(() => undefined);
-    if (agent) {
-      this.getTerminalState(agent).removeSession(terminal.terminalId);
-    }
-  }
-
   private async cleanupSessions(reason: string): Promise<void> {
     const agentManager = this.app.getService(AgentManager);
-
-    await Promise.allSettled(
-      Array.from(this.terminalHandles.values()).map((terminal) => terminal.handle.release()),
-    );
-    this.terminalHandles.clear();
-
-    if (!agentManager) {
-      this.sessions.clear();
-      this.sessionsByAgentId.clear();
-      return;
-    }
+    const fileSystemService = this.app.getService(FileSystemService);
+    const terminalService = this.app.getService(TerminalService);
 
     const sessions = Array.from(this.sessions.values());
     this.sessions.clear();
@@ -922,7 +495,16 @@ export default class ACPService implements TokenRingService {
 
     await Promise.allSettled(
       sessions.map(async (session) => {
-        await agentManager.deleteAgent(session.agent.id, reason);
+        if (session.fileSystemProviderName) {
+          fileSystemService?.unregisterFileSystemProvider(session.fileSystemProviderName);
+        }
+        if (session.terminalProviderName) {
+          terminalService?.unregisterTerminalProvider(session.terminalProviderName);
+        }
+
+        if (agentManager) {
+          agentManager.deleteAgent(session.agent.id, reason);
+        }
       }),
     );
   }
@@ -1088,16 +670,4 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? {...(value as Record<string, unknown>)}
     : {};
-}
-
-function toACPTextContent(content: string | Buffer): string | null {
-  if (typeof content === "string") {
-    return content;
-  }
-
-  if (Buffer.isBuffer(content)) {
-    return content.toString("utf-8");
-  }
-
-  return null;
 }
