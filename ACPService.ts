@@ -1,11 +1,7 @@
 import {
-  AgentSideConnection,
-  PROTOCOL_VERSION,
-  RequestError,
-  TerminalHandle,
-  ndJsonStream,
   type Agent as ACPAgent,
   type AgentCapabilities,
+  AgentSideConnection,
   type AuthenticateRequest,
   type AuthenticateResponse,
   type CancelNotification,
@@ -16,27 +12,31 @@ import {
   type InitializeResponse,
   type ListSessionsRequest,
   type ListSessionsResponse,
+  ndJsonStream,
   type NewSessionRequest,
   type NewSessionResponse,
   type PromptRequest,
   type PromptResponse,
+  PROTOCOL_VERSION,
+  RequestError,
   type SessionInfo,
+  TerminalHandle,
 } from "@agentclientprotocol/sdk";
 import type TokenRingAgent from "@tokenring-ai/agent/Agent";
 import type {AgentEventEnvelope, InputAttachment} from "@tokenring-ai/agent/AgentEvents";
 import type {ParsedAgentConfig} from "@tokenring-ai/agent/schema";
-import {AgentEventState} from "@tokenring-ai/agent/state/agentEventState";
 import AgentManager from "@tokenring-ai/agent/services/AgentManager";
+import {AgentEventState} from "@tokenring-ai/agent/state/agentEventState";
 import TokenRingApp from "@tokenring-ai/app";
 import type {TokenRingService} from "@tokenring-ai/app/types";
-import type FileSystemService from "../filesystem/FileSystemService.ts";
-import type TerminalService from "../terminal/TerminalService.ts";
-import type {ExecuteCommandOptions, ExecuteCommandResult} from "../terminal/TerminalProvider.ts";
 import {randomUUID} from "node:crypto";
 import path from "node:path";
 import process from "node:process";
 import {Readable, Writable} from "node:stream";
 import {setTimeout as delay} from "node:timers/promises";
+import type FileSystemService from "../filesystem/FileSystemService.ts";
+import type {ExecuteCommandOptions, ExecuteCommandResult} from "../terminal/TerminalProvider.ts";
+import type TerminalService from "../terminal/TerminalService.ts";
 import packageJSON from "./package.json" with {type: "json"};
 import type {ACPConfig} from "./schema.ts";
 
