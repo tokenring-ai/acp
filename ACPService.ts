@@ -22,11 +22,11 @@ import {
   type SessionInfo,
 } from "@agentclientprotocol/sdk";
 import type TokenRingAgent from "@tokenring-ai/agent/Agent";
-import type {AgentEventEnvelope, InputAttachment} from "@tokenring-ai/agent/AgentEvents";
+import type {AgentEventEnvelope, InputAttachment,} from "@tokenring-ai/agent/AgentEvents";
 import type {ParsedAgentConfig} from "@tokenring-ai/agent/schema";
 import AgentManager from "@tokenring-ai/agent/services/AgentManager";
 import {AgentEventState} from "@tokenring-ai/agent/state/agentEventState";
-import TokenRingApp from "@tokenring-ai/app";
+import type TokenRingApp from "@tokenring-ai/app";
 import type {TokenRingService} from "@tokenring-ai/app/types";
 import FileSystemService from "@tokenring-ai/filesystem/FileSystemService";
 import TerminalService from "@tokenring-ai/terminal/TerminalService";
@@ -76,15 +76,20 @@ export default class ACPService implements TokenRingService {
   constructor(
     private readonly app: TokenRingApp,
     private readonly config: ACPConfig,
-  ) {}
+  ) {
+  }
 
   start(): void {
     if (this.config.transport !== "stdio") {
       throw new Error(`Unsupported ACP transport: ${this.config.transport}`);
     }
 
-    const output = Writable.toWeb(process.stdout) as unknown as WritableStream<Uint8Array>;
-    const input = Readable.toWeb(process.stdin) as unknown as ReadableStream<Uint8Array>;
+    const output = Writable.toWeb(
+      process.stdout,
+    ) as unknown as WritableStream<Uint8Array>;
+    const input = Readable.toWeb(
+      process.stdin,
+    ) as unknown as ReadableStream<Uint8Array>;
     const stream = ndJsonStream(output, input);
 
     this.connection = new AgentSideConnection(
@@ -98,10 +103,7 @@ export default class ACPService implements TokenRingService {
       throw new Error("ACP connection was not initialized");
     }
 
-    await Promise.race([
-      this.connection.closed,
-      waitForAbort(signal),
-    ]);
+    await Promise.race([this.connection.closed, waitForAbort(signal)]);
 
     if (!signal.aborted) {
       this.app.shutdown("ACP connection closed");
@@ -146,8 +148,11 @@ export default class ACPService implements TokenRingService {
       ? agentManager.getAgentConfig(configuredAgentType)
       : undefined;
     const fallbackAgentType = agentManager.getAgentTypes()[0];
-    const baseAgentConfig = configuredAgentConfig
-      ?? (fallbackAgentType ? agentManager.getAgentConfig(fallbackAgentType) : undefined);
+    const baseAgentConfig =
+      configuredAgentConfig ??
+      (fallbackAgentType
+        ? agentManager.getAgentConfig(fallbackAgentType)
+        : undefined);
 
     if (!baseAgentConfig) {
       throw new Error("No agent types are registered");
@@ -166,7 +171,9 @@ export default class ACPService implements TokenRingService {
       },
     };
 
-    const agent = await agentManager.spawnAgentFromConfig(sessionAgentConfig as ParsedAgentConfig);
+    const agent = await agentManager.spawnAgentFromConfig(
+      sessionAgentConfig as ParsedAgentConfig,
+    );
 
     const sessionId = randomUUID();
     const session: ACPSession = {
@@ -197,12 +204,14 @@ export default class ACPService implements TokenRingService {
 
     const sessions = Array.from(this.sessions.values())
       .filter((session) => !cwdFilter || session.cwd === cwdFilter)
-      .map((session): SessionInfo => ({
-        sessionId: session.sessionId,
-        cwd: session.cwd,
-        title: session.agent.displayName,
-        updatedAt: session.updatedAt,
-      }));
+      .map(
+        (session): SessionInfo => ({
+          sessionId: session.sessionId,
+          cwd: session.cwd,
+          title: session.agent.displayName,
+          updatedAt: session.updatedAt,
+        }),
+      );
 
     return {sessions};
   }
@@ -210,7 +219,10 @@ export default class ACPService implements TokenRingService {
   requireSession(sessionId: string): ACPSession {
     const session = this.sessions.get(sessionId);
     if (!session) {
-      throw RequestError.invalidParams({sessionId}, `Session ${sessionId} was not found`);
+      throw RequestError.invalidParams(
+        {sessionId},
+        `Session ${sessionId} was not found`,
+      );
     }
     return session;
   }
@@ -252,7 +264,10 @@ export default class ACPService implements TokenRingService {
     ]);
 
     try {
-      for await (const state of session.agent.subscribeStateAsync(AgentEventState, streamSignal)) {
+      for await (const state of session.agent.subscribeStateAsync(
+        AgentEventState,
+        streamSignal,
+      )) {
         for (const event of state.yieldEventsByCursor(cursor)) {
           const emittedAssistantOutput = await this.forwardEvent(
             connection,
@@ -262,7 +277,10 @@ export default class ACPService implements TokenRingService {
           );
           sawAssistantOutput ||= emittedAssistantOutput;
 
-          if (event.type !== "agent.response" || event.requestId !== requestId) {
+          if (
+            event.type !== "agent.response" ||
+            event.requestId !== requestId
+          ) {
             continue;
           }
 
@@ -284,7 +302,9 @@ export default class ACPService implements TokenRingService {
         }
       }
 
-      throw new Error(`Prompt stream for session ${session.sessionId} ended unexpectedly`);
+      throw new Error(
+        `Prompt stream for session ${session.sessionId} ended unexpectedly`,
+      );
     } finally {
       session.activePrompt = null;
       session.updatedAt = new Date().toISOString();
@@ -308,19 +328,44 @@ export default class ACPService implements TokenRingService {
   ): Promise<boolean> {
     switch (event.type) {
       case "output.chat":
-        await this.emitAssistantText(connection, session.sessionId, event.message, messageIds.assistant);
+        await this.emitAssistantText(
+          connection,
+          session.sessionId,
+          event.message,
+          messageIds.assistant,
+        );
         return true;
       case "output.reasoning":
-        await this.emitThoughtText(connection, session.sessionId, event.message, messageIds.thought);
+        await this.emitThoughtText(
+          connection,
+          session.sessionId,
+          event.message,
+          messageIds.thought,
+        );
         return false;
       case "output.info":
-        await this.emitThoughtText(connection, session.sessionId, event.message, messageIds.thought);
+        await this.emitThoughtText(
+          connection,
+          session.sessionId,
+          event.message,
+          messageIds.thought,
+        );
         return false;
       case "output.warning":
-        await this.emitThoughtText(connection, session.sessionId, `[warning] ${event.message}`, messageIds.thought);
+        await this.emitThoughtText(
+          connection,
+          session.sessionId,
+          `[warning] ${event.message}`,
+          messageIds.thought,
+        );
         return false;
       case "output.error":
-        await this.emitThoughtText(connection, session.sessionId, `[error] ${event.message}`, messageIds.thought);
+        await this.emitThoughtText(
+          connection,
+          session.sessionId,
+          `[error] ${event.message}`,
+          messageIds.thought,
+        );
         return false;
       case "output.artifact":
         await connection.sessionUpdate({
@@ -396,7 +441,8 @@ export default class ACPService implements TokenRingService {
   }
 
   private decorateAgent(session: ACPSession): void {
-    if (!this.connection) {
+    const connection = this.connection;
+    if (!connection) {
       throw new Error("ACP connection was not initialized");
     }
 
@@ -406,8 +452,12 @@ export default class ACPService implements TokenRingService {
       askQuestion: TokenRingAgent["askQuestion"];
     };
 
-    agent.askForApproval = (async ({message, label = "Approve ?", default: defaultValue}) => {
-      const response = await this.connection!.requestPermission({
+    agent.askForApproval = (async ({
+                                     message,
+                                     label = "Approve ?",
+                                     default: defaultValue,
+                                   }) => {
+      const response = await connection.requestPermission({
         sessionId: session.sessionId,
         toolCall: {
           toolCallId: randomUUID(),
@@ -440,12 +490,14 @@ export default class ACPService implements TokenRingService {
       return response.outcome.optionId === "allow";
     }) as TokenRingAgent["askForApproval"];
 
-    agent.askForText = (async () => {
+    agent.askForText = (() => {
       throw new Error("ACP mode does not support interactive text prompts");
     }) as TokenRingAgent["askForText"];
 
-    agent.askQuestion = (async () => {
-      throw new Error("ACP mode does not support arbitrary interactive questions");
+    agent.askQuestion = (() => {
+      throw new Error(
+        "ACP mode does not support arbitrary interactive questions",
+      );
     }) as TokenRingAgent["askQuestion"];
   }
 
@@ -455,11 +507,19 @@ export default class ACPService implements TokenRingService {
     }
 
     const fileSystemService = this.app.getService(FileSystemService);
-    if (fileSystemService && (this.clientCapabilities.fs?.readTextFile || this.clientCapabilities.fs?.writeTextFile)) {
+    if (
+      fileSystemService &&
+      (this.clientCapabilities.fs?.readTextFile ||
+        this.clientCapabilities.fs?.writeTextFile)
+    ) {
       const providerName = `acp-fs-${session.sessionId}`;
       fileSystemService.registerFileSystemProvider(
         providerName,
-        new ACPFileSystemProvider(this.connection, session.sessionId, this.clientCapabilities),
+        new ACPFileSystemProvider(
+          this.connection,
+          session.sessionId,
+          this.clientCapabilities,
+        ),
       );
       fileSystemService.setActiveFileSystem(providerName, session.agent);
       session.fileSystemProviderName = providerName;
@@ -468,7 +528,10 @@ export default class ACPService implements TokenRingService {
     const terminalService = this.app.getService(TerminalService);
     if (terminalService && this.clientCapabilities.terminal) {
       const providerName = `acp-terminal-${session.sessionId}`;
-      const provider = new ACPTerminalProvider(this.connection, session.sessionId);
+      const provider = new ACPTerminalProvider(
+        this.connection,
+        session.sessionId,
+      );
       terminalService.registerTerminalProvider(providerName, provider);
       terminalService.setActiveProvider(providerName, session.agent);
       session.terminalProvider = provider;
@@ -478,13 +541,16 @@ export default class ACPService implements TokenRingService {
 
   private validateSessionCwd(cwd: string): string {
     if (!path.isAbsolute(cwd)) {
-      throw RequestError.invalidParams({cwd}, "ACP session cwd must be an absolute path");
+      throw RequestError.invalidParams(
+        {cwd},
+        "ACP session cwd must be an absolute path",
+      );
     }
 
     return path.resolve(cwd);
   }
 
-  private async cleanupSessions(reason: string): Promise<void> {
+  private cleanupSessions(reason: string) {
     const agentManager = this.app.getService(AgentManager);
     const fileSystemService = this.app.getService(FileSystemService);
     const terminalService = this.app.getService(TerminalService);
@@ -493,20 +559,22 @@ export default class ACPService implements TokenRingService {
     this.sessions.clear();
     this.sessionsByAgentId.clear();
 
-    await Promise.allSettled(
-      sessions.map(async (session) => {
-        if (session.fileSystemProviderName) {
-          fileSystemService?.unregisterFileSystemProvider(session.fileSystemProviderName);
-        }
-        if (session.terminalProviderName) {
-          terminalService?.unregisterTerminalProvider(session.terminalProviderName);
-        }
+    for (const session of sessions) {
+      if (session.fileSystemProviderName) {
+        fileSystemService?.unregisterFileSystemProvider(
+          session.fileSystemProviderName,
+        );
+      }
+      if (session.terminalProviderName) {
+        terminalService?.unregisterTerminalProvider(
+          session.terminalProviderName,
+        );
+      }
 
-        if (agentManager) {
-          agentManager.deleteAgent(session.agent.id, reason);
-        }
-      }),
-    );
+      if (agentManager) {
+        agentManager.deleteAgent(session.agent.id, reason);
+      }
+    }
   }
 }
 
@@ -514,30 +582,32 @@ class TokenRingACPAgent implements ACPAgent {
   constructor(
     private readonly connection: AgentSideConnection,
     private readonly service: ACPService,
-  ) {}
-
-  async initialize(params: InitializeRequest): Promise<InitializeResponse> {
-    return this.service.initialize(params);
+  ) {
   }
 
-  async authenticate(_params: AuthenticateRequest): Promise<AuthenticateResponse> {
-    return {};
+  initialize(params: InitializeRequest): Promise<InitializeResponse> {
+    return Promise.resolve(this.service.initialize(params));
   }
 
-  async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
+  authenticate(_params: AuthenticateRequest): Promise<AuthenticateResponse> {
+    return Promise.resolve({});
+  }
+
+  newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
     return this.service.createSession(params);
   }
 
-  async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
-    return this.service.listSessions(params);
+  listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+    return Promise.resolve(this.service.listSessions(params));
   }
 
-  async prompt(params: PromptRequest): Promise<PromptResponse> {
+  prompt(params: PromptRequest): Promise<PromptResponse> {
     return this.service.prompt(this.connection, params);
   }
 
-  async cancel(params: CancelNotification): Promise<void> {
+  cancel(params: CancelNotification): Promise<void> {
     this.service.cancel(params);
+    return Promise.resolve();
   }
 }
 
@@ -592,11 +662,15 @@ function convertPromptToAgentInput(prompt: ContentBlock[]): {
     }
   }
 
-  const message = textParts.join("\n\n").trim() || "Use the attached context to help with this request.";
+  const message =
+    textParts.join("\n\n").trim() ||
+    "Use the attached context to help with this request.";
   return {message, attachments};
 }
 
-function convertEmbeddedResourceToAttachment(block: EmbeddedResource): InputAttachment {
+function convertEmbeddedResourceToAttachment(
+  block: EmbeddedResource,
+): InputAttachment {
   const resource = block.resource;
   if ("text" in resource) {
     return {
@@ -619,7 +693,9 @@ function convertEmbeddedResourceToAttachment(block: EmbeddedResource): InputAtta
   };
 }
 
-function convertArtifactToContentBlock(event: Extract<AgentEventEnvelope, {type: "output.artifact"}>): ContentBlock {
+function convertArtifactToContentBlock(
+  event: Extract<AgentEventEnvelope, { type: "output.artifact" }>,
+): ContentBlock {
   const uri = `artifact://${encodeURIComponent(event.name)}`;
   if (event.encoding === "text") {
     return {
@@ -642,7 +718,10 @@ function convertArtifactToContentBlock(event: Extract<AgentEventEnvelope, {type:
   };
 }
 
-function getAttachmentName(uri: string | null | undefined, fallback: string): string {
+function getAttachmentName(
+  uri: string | null | undefined,
+  fallback: string,
+): string {
   if (!uri) {
     return fallback;
   }

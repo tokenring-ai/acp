@@ -1,4 +1,4 @@
-import type {AgentSideConnection, TerminalHandle} from "@agentclientprotocol/sdk";
+import type {AgentSideConnection,} from "@agentclientprotocol/sdk";
 import type {
   ExecuteCommandOptions,
   ExecuteCommandResult,
@@ -8,7 +8,8 @@ import type {
 import process from "node:process";
 import {setTimeout as delay} from "node:timers/promises";
 
-export default class ACPTerminalProvider implements NonInteractiveTerminalProvider {
+export default class ACPTerminalProvider
+  implements NonInteractiveTerminalProvider {
   readonly isInteractive = false;
   readonly name = "ACPTerminalProvider";
   readonly displayName: string;
@@ -36,7 +37,9 @@ export default class ACPTerminalProvider implements NonInteractiveTerminalProvid
     try {
       const timeoutSeconds = options.timeoutSeconds ?? 120;
       const exitResult = await Promise.race([
-        handle.waitForExit().then((result) => ({type: "exit" as const, result})),
+        handle
+          .waitForExit()
+          .then((result) => ({type: "exit" as const, result})),
         delay(timeoutSeconds * 1000).then(() => ({type: "timeout" as const})),
       ]);
 
@@ -49,7 +52,8 @@ export default class ACPTerminalProvider implements NonInteractiveTerminalProvid
       const formattedOutput = output.truncated
         ? `${output.output}\n[...Terminal output truncated by ACP client...]\n`
         : output.output;
-      const exitCode = exitResult.result.exitCode ?? output.exitStatus?.exitCode ?? 1;
+      const exitCode =
+        exitResult.result.exitCode ?? output.exitStatus?.exitCode ?? 1;
 
       if (exitCode === 0 && !exitResult.result.signal) {
         return {status: "success", output: formattedOutput, exitCode: 0};
@@ -63,7 +67,10 @@ export default class ACPTerminalProvider implements NonInteractiveTerminalProvid
     }
   }
 
-  async runScript(script: string, options: ExecuteCommandOptions): Promise<ExecuteCommandResult> {
+  runScript(
+    script: string,
+    options: ExecuteCommandOptions,
+  ): Promise<ExecuteCommandResult> {
     const shell = process.env.SHELL || "/bin/bash";
     return this.executeCommand(shell, ["-lc", script], options);
   }

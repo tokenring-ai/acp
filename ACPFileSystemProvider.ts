@@ -1,6 +1,5 @@
-import type {AgentSideConnection, ClientCapabilities} from "@agentclientprotocol/sdk";
-import type FileSystemProvider from "@tokenring-ai/filesystem/FileSystemProvider";
-import type {DirectoryTreeOptions, GlobOptions, GrepOptions, GrepResult, StatLike, WatchOptions} from "@tokenring-ai/filesystem/FileSystemProvider";
+import type {AgentSideConnection, ClientCapabilities,} from "@agentclientprotocol/sdk";
+import type {DirectoryTreeOptions, FileSystemProvider, StatLike} from "@tokenring-ai/filesystem/FileSystemProvider";
 
 export default class ACPFileSystemProvider implements FileSystemProvider {
   readonly name = "ACPFileSystemProvider";
@@ -29,7 +28,10 @@ export default class ACPFileSystemProvider implements FileSystemProvider {
     }
   }
 
-  async writeFile(absolutePath: string, content: string | Buffer): Promise<boolean> {
+  async writeFile(
+    absolutePath: string,
+    content: string | Buffer,
+  ): Promise<boolean> {
     const textContent = toTextContent(content);
     await this.connection.writeTextFile({
       sessionId: this.sessionId,
@@ -39,7 +41,10 @@ export default class ACPFileSystemProvider implements FileSystemProvider {
     return true;
   }
 
-  async appendFile(absolutePath: string, content: string | Buffer): Promise<boolean> {
+  async appendFile(
+    absolutePath: string,
+    content: string | Buffer,
+  ): Promise<boolean> {
     const textContent = toTextContent(content);
     const current = await this.connection.readTextFile({
       sessionId: this.sessionId,
@@ -58,7 +63,10 @@ export default class ACPFileSystemProvider implements FileSystemProvider {
       return false;
     }
     try {
-      await this.connection.readTextFile({sessionId: this.sessionId, path: absolutePath});
+      await this.connection.readTextFile({
+        sessionId: this.sessionId,
+        path: absolutePath,
+      });
       return true;
     } catch {
       return false;
@@ -70,7 +78,10 @@ export default class ACPFileSystemProvider implements FileSystemProvider {
       return {exists: false, path: absolutePath};
     }
     try {
-      await this.connection.readTextFile({sessionId: this.sessionId, path: absolutePath});
+      await this.connection.readTextFile({
+        sessionId: this.sessionId,
+        path: absolutePath,
+      });
       return {
         exists: true,
         path: absolutePath,
@@ -83,36 +94,34 @@ export default class ACPFileSystemProvider implements FileSystemProvider {
     }
   }
 
-  async deleteFile(_absolutePath: string): Promise<boolean> {
+  deleteFile(_absolutePath: string): Promise<boolean> {
     throw new Error("ACP FileSystemProvider does not support deleteFile");
   }
 
-  async rename(_oldPath: string, _newPath: string): Promise<boolean> {
+  rename(_oldPath: string, _newPath: string): Promise<boolean> {
     throw new Error("ACP FileSystemProvider does not support rename");
   }
 
-  async createDirectory(_absolutePath: string, _options?: {recursive?: boolean}): Promise<boolean> {
+  createDirectory(
+    _absolutePath: string,
+    _options?: { recursive?: boolean },
+  ): Promise<boolean> {
     throw new Error("ACP FileSystemProvider does not support createDirectory");
   }
 
-  async copy(_src: string, _dest: string, _options?: {overwrite?: boolean}): Promise<boolean> {
+  copy(
+    _src: string,
+    _dest: string,
+    _options?: { overwrite?: boolean },
+  ): Promise<boolean> {
     throw new Error("ACP FileSystemProvider does not support copy");
   }
 
-  async* getDirectoryTree(_dir: string, _options?: DirectoryTreeOptions): AsyncGenerator<string> {
+  getDirectoryTree(
+    _dir: string,
+    _options?: DirectoryTreeOptions,
+  ): Generator<string> {
     throw new Error("ACP FileSystemProvider does not support getDirectoryTree");
-  }
-
-  async watch(_dir: string, _options?: WatchOptions): Promise<never> {
-    throw new Error("ACP FileSystemProvider does not support watch");
-  }
-
-  async glob(_pattern: string, _options?: GlobOptions): Promise<string[]> {
-    throw new Error("ACP FileSystemProvider does not support glob");
-  }
-
-  async grep(_searchString: string | string[], _options?: GrepOptions): Promise<GrepResult[]> {
-    throw new Error("ACP FileSystemProvider does not support grep");
   }
 }
 

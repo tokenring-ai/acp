@@ -1,4 +1,4 @@
-import {TokenRingPlugin} from "@tokenring-ai/app";
+import type {TokenRingPlugin} from "@tokenring-ai/app";
 import {z} from "zod";
 import ACPService from "./ACPService.ts";
 import packageJSON from "./package.json" with {type: "json"};
