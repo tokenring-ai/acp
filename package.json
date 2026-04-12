@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "description": "Standardized communication layer for seamless inter-agent messaging.",
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.17.0",
+    "@agentclientprotocol/sdk": "^0.18.0",
     "@tokenring-ai/agent": "0.2.0",
     "@tokenring-ai/app": "0.2.0",
     "@tokenring-ai/filesystem": "0.2.0",

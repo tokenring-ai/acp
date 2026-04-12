@@ -22,7 +22,7 @@ import {
   type SessionInfo,
 } from "@agentclientprotocol/sdk";
 import type TokenRingAgent from "@tokenring-ai/agent/Agent";
-import type {AgentEventEnvelope, InputAttachment,} from "@tokenring-ai/agent/AgentEvents";
+import {type AgentEventEnvelope, BaseAttachmentSchema, type InputAttachment} from "@tokenring-ai/agent/AgentEvents";
 import type {ParsedAgentConfig} from "@tokenring-ai/agent/schema";
 import AgentManager from "@tokenring-ai/agent/services/AgentManager";
 import {AgentEventState} from "@tokenring-ai/agent/state/agentEventState";
@@ -628,7 +628,7 @@ function convertPromptToAgentInput(prompt: ContentBlock[]): {
           type: "attachment",
           name: block.title || block.name,
           encoding: "href",
-          mimeType: block.mimeType || "application/octet-stream",
+          mimeType: BaseAttachmentSchema.shape.mimeType.parse(block.mimeType),
           body: block.uri,
           timestamp: Date.now(),
         });
@@ -641,7 +641,7 @@ function convertPromptToAgentInput(prompt: ContentBlock[]): {
           type: "attachment",
           name: getAttachmentName(block.uri, "image"),
           encoding: "base64",
-          mimeType: block.mimeType,
+          mimeType: BaseAttachmentSchema.shape.mimeType.parse(block.mimeType),
           body: block.data,
           timestamp: Date.now(),
         });
@@ -651,7 +651,7 @@ function convertPromptToAgentInput(prompt: ContentBlock[]): {
           type: "attachment",
           name: getAttachmentName(undefined, "audio"),
           encoding: "base64",
-          mimeType: block.mimeType,
+          mimeType: BaseAttachmentSchema.shape.mimeType.parse(block.mimeType),
           body: block.data,
           timestamp: Date.now(),
         });
@@ -677,7 +677,7 @@ function convertEmbeddedResourceToAttachment(
       type: "attachment",
       name: getAttachmentName(resource.uri, "resource.txt"),
       encoding: "text",
-      mimeType: resource.mimeType || "text/plain",
+      mimeType: BaseAttachmentSchema.shape.mimeType.parse(resource.mimeType),
       body: resource.text,
       timestamp: Date.now(),
     };
@@ -687,7 +687,7 @@ function convertEmbeddedResourceToAttachment(
     type: "attachment",
     name: getAttachmentName(resource.uri, "resource.bin"),
     encoding: "base64",
-    mimeType: resource.mimeType || "application/octet-stream",
+    mimeType: BaseAttachmentSchema.shape.mimeType.parse(resource.mimeType),
     body: resource.blob,
     timestamp: Date.now(),
   };

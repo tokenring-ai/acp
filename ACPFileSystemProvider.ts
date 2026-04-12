@@ -1,4 +1,4 @@
-import type {AgentSideConnection, ClientCapabilities,} from "@agentclientprotocol/sdk";
+import type {AgentSideConnection, ClientCapabilities} from "@agentclientprotocol/sdk";
 import type {DirectoryTreeOptions, FileSystemProvider, StatLike} from "@tokenring-ai/filesystem/FileSystemProvider";
 
 export default class ACPFileSystemProvider implements FileSystemProvider {

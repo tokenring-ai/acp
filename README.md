@@ -43,22 +43,27 @@ The main service implementing the Agent Client Protocol for TokenRing.
 **Key Methods**:
 
 #### `initialize(params: InitializeRequest): InitializeResponse`
+
 Initializes the ACP connection and returns protocol capabilities.
 
 **Parameters**:
+
 - `params`: `InitializeRequest` - ACP initialization request containing client capabilities
 
 **Returns**: `InitializeResponse` - Protocol version and agent capabilities
 
 #### `createSession(params: NewSessionRequest): Promise<NewSessionResponse>`
+
 Creates a new ACP session with a TokenRing agent.
 
 **Parameters**:
+
 - `params`: `NewSessionRequest` - Session creation request with working directory
 
 **Returns**: `NewSessionResponse` - Created session ID
 
 **Example**:
+
 ```typescript
 const response = await acpService.createSession({
   cwd: '/path/to/working/directory'
@@ -67,26 +72,32 @@ const response = await acpService.createSession({
 ```
 
 #### `listSessions(params: ListSessionsRequest): ListSessionsResponse`
+
 Lists all active sessions, optionally filtered by working directory.
 
 **Parameters**:
+
 - `params`: `ListSessionsRequest` - Optional working directory filter
 
 **Returns**: `ListSessionsResponse` - Array of session info
 
 #### `prompt(connection: AgentSideConnection, params: PromptRequest): Promise<PromptResponse>`
+
 Handles ACP prompt requests, streaming agent responses back to the client.
 
 **Parameters**:
+
 - `connection`: `AgentSideConnection` - ACP connection instance
 - `params`: `PromptRequest` - Prompt request with message and attachments
 
 **Returns**: `PromptResponse` - Response with stop reason and message ID
 
 #### `cancel(params: CancelNotification): void`
+
 Cancels an active prompt in a session.
 
 **Parameters**:
+
 - `params`: `CancelNotification` - Cancellation notification with session ID
 
 ### TokenRingACPAgent
@@ -96,6 +107,7 @@ Internal agent implementation that delegates to ACPService.
 **Location**: `ACPService.ts` (inner class)
 
 Implements all ACP agent methods:
+
 - `initialize`: Delegates to service
 - `authenticate`: No authentication required
 - `newSession`: Delegates to service
@@ -437,6 +449,7 @@ The ACP service patches FileSystemService and TerminalService at startup to inte
 ### Event Forwarding
 
 Agent events are forwarded to the ACP client in real-time:
+
 - Chat messages → `agent_message_chunk`
 - Reasoning/thoughts → `agent_thought_chunk`
 - Artifacts → `resource` content blocks
@@ -444,6 +457,7 @@ Agent events are forwarded to the ACP client in real-time:
 ### Permission Handling
 
 Tool approvals are handled through the ACP client's permission system:
+
 - `askForApproval`: Prompts client for tool approval
 - `askForText`: Not supported in ACP mode
 - `askQuestion`: Not supported in ACP mode
@@ -451,6 +465,7 @@ Tool approvals are handled through the ACP client's permission system:
 ### Session Cleanup
 
 Sessions are cleaned up when:
+
 - The ACP connection is closed
 - The service is stopped
 - The application is shut down

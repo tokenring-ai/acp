@@ -1,4 +1,4 @@
-import type {AgentSideConnection,} from "@agentclientprotocol/sdk";
+import type {AgentSideConnection} from "@agentclientprotocol/sdk";
 import type {
   ExecuteCommandOptions,
   ExecuteCommandResult,
