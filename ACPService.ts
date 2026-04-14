@@ -81,7 +81,7 @@ export default class ACPService implements TokenRingService {
 
   start(): void {
     if (this.config.transport !== "stdio") {
-      throw new Error(`Unsupported ACP transport: ${this.config.transport}`);
+      throw new Error(`Unsupported ACP transport: ${this.config.transport as string}`);
     }
 
     const output = Writable.toWeb(
@@ -110,8 +110,8 @@ export default class ACPService implements TokenRingService {
     }
   }
 
-  async stop(): Promise<void> {
-    await this.cleanupSessions("ACP service stopping");
+  stop(): void {
+    this.cleanupSessions("ACP service stopping");
   }
 
   initialize(params: InitializeRequest): InitializeResponse {
@@ -171,7 +171,7 @@ export default class ACPService implements TokenRingService {
       },
     };
 
-    const agent = await agentManager.spawnAgentFromConfig(
+    const agent = agentManager.spawnAgentFromConfig(
       sessionAgentConfig as ParsedAgentConfig,
     );
 

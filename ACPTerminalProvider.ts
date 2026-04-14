@@ -60,7 +60,7 @@ export default class ACPTerminalProvider
       }
 
       return {status: "badExitCode", output: formattedOutput, exitCode};
-    } catch (error) {
+    } catch (error: unknown) {
       return {status: "unknownError", error: (error as Error).message};
     } finally {
       await handle.release().catch(() => undefined);
