@@ -1,11 +1,11 @@
-import type {TokenRingPlugin} from "@tokenring-ai/app";
-import {z} from "zod";
+import type { TokenRingPlugin } from "@tokenring-ai/app";
+import { z } from "zod";
 import ACPService from "./ACPService.ts";
-import packageJSON from "./package.json" with {type: "json"};
-import {ACPConfigSchema} from "./schema.ts";
+import packageJSON from "./package.json" with { type: "json" };
+import { ACPConfigSchema } from "./schema.ts";
 
 const packageConfigSchema = z.object({
-  acp: ACPConfigSchema.optional(),
+  acp: ACPConfigSchema.exactOptional(),
 });
 
 export default {

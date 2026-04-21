@@ -1,5 +1,5 @@
-import type {AgentSideConnection, ClientCapabilities} from "@agentclientprotocol/sdk";
-import type {DirectoryTreeOptions, FileSystemProvider, StatLike} from "@tokenring-ai/filesystem/FileSystemProvider";
+import type { AgentSideConnection, ClientCapabilities } from "@agentclientprotocol/sdk";
+import type { DirectoryTreeOptions, FileSystemProvider, StatLike } from "@tokenring-ai/filesystem/FileSystemProvider";
 
 export default class ACPFileSystemProvider implements FileSystemProvider {
   readonly name = "ACPFileSystemProvider";
@@ -28,10 +28,7 @@ export default class ACPFileSystemProvider implements FileSystemProvider {
     }
   }
 
-  async writeFile(
-    absolutePath: string,
-    content: string | Buffer,
-  ): Promise<boolean> {
+  async writeFile(absolutePath: string, content: string | Buffer): Promise<boolean> {
     const textContent = toTextContent(content);
     await this.connection.writeTextFile({
       sessionId: this.sessionId,
@@ -41,10 +38,7 @@ export default class ACPFileSystemProvider implements FileSystemProvider {
     return true;
   }
 
-  async appendFile(
-    absolutePath: string,
-    content: string | Buffer,
-  ): Promise<boolean> {
+  async appendFile(absolutePath: string, content: string | Buffer): Promise<boolean> {
     const textContent = toTextContent(content);
     const current = await this.connection.readTextFile({
       sessionId: this.sessionId,
@@ -75,7 +69,7 @@ export default class ACPFileSystemProvider implements FileSystemProvider {
 
   async stat(absolutePath: string): Promise<StatLike> {
     if (!this.capabilities.fs?.readTextFile) {
-      return {exists: false, path: absolutePath};
+      return { exists: false, path: absolutePath };
     }
     try {
       await this.connection.readTextFile({
@@ -90,7 +84,7 @@ export default class ACPFileSystemProvider implements FileSystemProvider {
         isDirectory: false,
       };
     } catch {
-      return {exists: false, path: absolutePath};
+      return { exists: false, path: absolutePath };
     }
   }
 
@@ -102,25 +96,15 @@ export default class ACPFileSystemProvider implements FileSystemProvider {
     throw new Error("ACP FileSystemProvider does not support rename");
   }
 
-  createDirectory(
-    _absolutePath: string,
-    _options?: { recursive?: boolean },
-  ): Promise<boolean> {
+  createDirectory(_absolutePath: string, _options?: { recursive?: boolean | undefined }): Promise<boolean> {
     throw new Error("ACP FileSystemProvider does not support createDirectory");
   }
 
-  copy(
-    _src: string,
-    _dest: string,
-    _options?: { overwrite?: boolean },
-  ): Promise<boolean> {
+  copy(_src: string, _dest: string, _options?: { overwrite?: boolean | undefined }): Promise<boolean> {
     throw new Error("ACP FileSystemProvider does not support copy");
   }
 
-  getDirectoryTree(
-    _dir: string,
-    _options?: DirectoryTreeOptions,
-  ): Generator<string> {
+  getDirectoryTree(_dir: string, _options?: DirectoryTreeOptions): Generator<string> {
     throw new Error("ACP FileSystemProvider does not support getDirectoryTree");
   }
 }
