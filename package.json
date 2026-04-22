@@ -1,7 +1,7 @@
 {
   "name": "@tokenring-ai/acp",
   "version": "0.2.0",
-  "description": "Standardized communication layer for seamless inter-agent messaging.",
+  "description": "Agent Client Protocol (ACP) integration for TokenRing agents, enabling stdio-based communication with ACP-compatible clients.",
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.18.0",
     "@tokenring-ai/agent": "0.2.0",

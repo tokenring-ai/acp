@@ -2,20 +2,24 @@
 
 ## Overview
 
-The `@tokenring-ai/acp` package provides Agent Client Protocol (ACP) integration for TokenRing agents. It implements the Agent Client Protocol specification, enabling TokenRing agents to communicate with ACP-compatible clients through a stdio-based transport mechanism.
+The `@tokenring-ai/acp` package provides Agent Client Protocol (ACP) integration for TokenRing agents. It implements the
+Agent Client Protocol specification, enabling TokenRing agents to communicate with ACP-compatible clients through a
+stdio-based transport mechanism.
 
-This package serves as a bridge between TokenRing's agent ecosystem and the broader Agent Client Protocol ecosystem, allowing external ACP clients to create sessions, execute commands, manage files, and interact with AI agents in a standardized way.
+This package serves as a bridge between TokenRing's agent ecosystem and the broader Agent Client Protocol ecosystem,
+allowing external ACP clients to create sessions, execute commands, manage files, and interact with AI agents in a
+standardized way.
 
 ## Key Features
 
 - **ACP Protocol Implementation**: Full implementation of the Agent Client Protocol specification
 - **Session Management**: Create, list, and manage multiple agent sessions with working directory support
-- **File System Integration**: Patched FileSystemService for ACP client-based file operations (read, write, append)
-- **Terminal Integration**: Patched TerminalService for command execution and interactive terminal sessions
+- **File System Integration**: ACP-compatible file system provider for file operations (read, write, append)
+- **Terminal Integration**: ACP-compatible terminal provider for command execution
 - **Event Streaming**: Real-time forwarding of agent events (chat, reasoning, warnings, errors, artifacts)
 - **Permission Handling**: Integration with ACP client for tool approval requests
 - **State Management**: Seamless integration with TokenRing agent state persistence
-- **Working Directory Support**: Session-specific working directories with path validation and sandboxing
+- **Working Directory Support**: Session-specific working directories with path validation
 
 ## Installation
 
@@ -25,12 +29,80 @@ bun add @tokenring-ai/acp
 
 ## Dependencies
 
-- `@agentclientprotocol/sdk`: ^0.17.0 - Agent Client Protocol SDK
+- `@agentclientprotocol/sdk`: ^0.18.0 - Agent Client Protocol SDK
 - `@tokenring-ai/agent`: 0.2.0 - Agent orchestration
 - `@tokenring-ai/app`: 0.2.0 - Base application framework
 - `@tokenring-ai/filesystem`: 0.2.0 - File system service
 - `@tokenring-ai/terminal`: 0.2.0 - Terminal service
 - `zod`: ^4.3.6 - Schema validation
+
+## Chat Commands
+
+This package does not define chat commands. Interactions are handled through the ACP protocol's prompt mechanism.
+
+## Tools
+
+This package does not define tools. Tool execution is handled through the ACP protocol.
+
+## Configuration
+
+### Configuration Schema
+
+**Location**: `schema.ts`
+
+```typescript
+export const ACPConfigSchema = z.object({
+  transport: z.literal('stdio').default('stdio'),
+  defaultAgentType: z.string().exactOptional(),
+});
+
+export type ACPConfig = z.output<typeof ACPConfigSchema>;
+```
+
+### Configuration Options
+
+| Property           | Type      | Required | Default     | Description                                          |
+|--------------------|-----------|----------|-------------|------------------------------------------------------|
+| `transport`        | `"stdio"` | No       | `"stdio"`   | Transport mechanism (currently only stdio supported) |
+| `defaultAgentType` | `string`  | No       | `undefined` | Default agent type to use for sessions               |
+
+### Plugin Configuration
+
+Configure the ACP service through the plugin:
+
+```typescript
+import TokenRingApp from '@tokenring-ai/app';
+import acpPlugin from '@tokenring-ai/acp/plugin';
+
+const app = new TokenRingApp();
+
+await app.install(acpPlugin, {
+  acp: {
+    defaultAgentType: 'coder'
+  }
+});
+
+await app.start();
+```
+
+### Programmatic Configuration
+
+```typescript
+import TokenRingApp from '@tokenring-ai/app';
+import { ACPService, ACPConfigSchema } from '@tokenring-ai/acp';
+
+const app = new TokenRingApp();
+const config = ACPConfigSchema.parse({
+  defaultAgentType: 'coder'
+});
+
+app.addServices(new ACPService(app, config));
+await app.start();
+
+// ACP connection runs via stdio
+const signal = AbortSignal.timeout(30000);
+await app.run(signal);
+```
 
 ## Core Components
 
@@ -39,6 +111,8 @@ bun add @tokenring-ai/acp
 The main service implementing the Agent Client Protocol for TokenRing.
 
 **Location**: `ACPService.ts`
+
+**Implements**: `TokenRingService`
 
 **Key Methods**:
 
@@ -100,80 +174,57 @@ Cancels an active prompt in a session.
 
 - `params`: `CancelNotification` - Cancellation notification with session ID
 
-### TokenRingACPAgent
+#### `start(): void`
 
-Internal agent implementation that delegates to ACPService.
+Starts the ACP service and initializes the stdio transport connection.
 
-**Location**: `ACPService.ts` (inner class)
+#### `run(signal: AbortSignal): Promise<void>`
 
-Implements all ACP agent methods:
+Runs the ACP service until the connection is closed or signal is aborted.
 
-- `initialize`: Delegates to service
-- `authenticate`: No authentication required
-- `newSession`: Delegates to service
-- `listSessions`: Delegates to service
-- `prompt`: Delegates to service
-- `cancel`: Delegates to service
+#### `stop(): void`
 
-### Configuration Schema
+Stops the ACP service and cleans up all sessions.
 
-**Location**: `schema.ts`
+### ACPFileSystemProvider
 
-```typescript
-export const ACPConfigSchema = z.object({
-  transport: z.literal('stdio').default('stdio'),
-  defaultAgentType: z.string().optional(),
-});
+File system provider that routes file operations through the ACP connection.
 
-export type ACPConfig = z.output<typeof ACPConfigSchema>;
-```
+**Location**: `ACPFileSystemProvider.ts`
 
-**Configuration Options**:
+**Supported Operations**:
 
-| Property | Type | Required | Default | Description |
-|----------|------|----------|---------|-------------|
-| `transport` | `"stdio"` | No | `"stdio"` | Transport mechanism (currently only stdio supported) |
-| `defaultAgentType` | `string` | No | `undefined` | Default agent type to use for sessions |
+- `readFile`: Reads file content through ACP client
+- `writeFile`: Writes file content through ACP client
+- `appendFile`: Appends content to file through ACP client
+- `exists`: Checks if file exists through ACP client
+- `stat`: Gets file statistics through ACP client
+
+**Unsupported Operations**:
+
+- `deleteFile`: Not supported in ACP mode
+- `rename`: Not supported in ACP mode
+- `createDirectory`: Not supported in ACP mode
+- `copy`: Not supported in ACP mode
+- `getDirectoryTree`: Not supported in ACP mode
+
+### ACPTerminalProvider
+
+Terminal provider that routes terminal operations through the ACP connection.
+
+**Location**: `ACPTerminalProvider.ts`
+
+**Supported Operations**:
+
+- `executeCommand`: Executes commands through ACP client terminal
+- `runScript`: Runs shell scripts through ACP client terminal
+
+**Configuration**:
+
+- `isInteractive`: `false` (non-interactive terminal provider)
+- `supportedIsolationLevels`: `["none"]`
 
 ## Usage Examples
-
-### Plugin Registration
-
-Register the ACP service in your TokenRing application:
-
-```typescript
-import TokenRingApp from '@tokenring-ai/app';
-import acpPlugin from '@tokenring-ai/acp/plugin';
-
-const app = new TokenRingApp();
-
-await app.install(acpPlugin, {
-  acp: {
-    defaultAgentType: 'coder'
-  }
-});
-
-await app.start();
-```
-
-### Programmatic Service Registration
-
-```typescript
-import TokenRingApp from '@tokenring-ai/app';
-import ACPService, { ACPConfigSchema } from '@tokenring-ai/acp';
-
-const app = new TokenRingApp();
-const config = ACPConfigSchema.parse({
-  defaultAgentType: 'coder'
-});
-
-app.addServices(new ACPService(app, config));
-await app.start();
-
-// ACP connection runs via stdio
-const signal = AbortSignal.timeout(30000);
-await app.run(signal);
-```
 
 ### Session Management
 
@@ -203,83 +254,48 @@ const promptResponse = await acpConnection.prompt({
 
 ### File Operations (ACP Client Integration)
 
-When the ACP client supports file operations, the FileSystemService is patched to route file operations through the ACP connection:
+When the ACP client supports file operations, the ACPFileSystemProvider routes file operations through the ACP
+connection:
 
 ```typescript
-// FileSystemService automatically routes through ACP if client supports it
+// File operations are routed through ACP if client supports the capability
 const fileSystemService = app.getService(FileSystemService);
 
-// Read file (routed through ACP if client supports readTextFile)
+// Register the ACP file system provider for a session
+fileSystemService.registerFileSystemProvider(
+  'acp-fs-session123',
+  new ACPFileSystemProvider(connection, sessionId, clientCapabilities)
+);
+
+// Read file (routed through ACP)
 const content = await fileSystemService.readTextFile('./src/index.ts', agent);
 
-// Write file (routed through ACP if client supports writeTextFile)
+// Write file (routed through ACP)
 await fileSystemService.writeFile('./src/output.txt', 'Hello World', agent);
 
-// Append file (routed through ACP if client supports both read and write)
+// Append file (routed through ACP)
 await fileSystemService.appendFile('./src/output.txt', '\nMore content', agent);
 ```
 
 ### Terminal Operations (ACP Client Integration)
 
-When the ACP client supports terminal operations, the TerminalService is patched to route terminal operations through the ACP connection:
+When the ACP client supports terminal operations, the ACPTerminalProvider routes terminal operations through the ACP
+connection:
 
 ```typescript
 const terminalService = app.getService(TerminalService);
+
+// Register the ACP terminal provider for a session
+terminalService.registerTerminalProvider(
+  'acp-terminal-session123',
+  new ACPTerminalProvider(connection, sessionId)
+);
 
 // Execute command (routed through ACP)
 const result = await terminalService.executeCommand('ls', ['-la'], {
   timeoutSeconds: 30,
   workingDirectory: '/path/to/project'
 }, agent);
-
-// Start interactive session
-const sessionId = await terminalService.startInteractiveSession(agent, 'bash');
-
-// Send input to session
-await terminalService.sendInputToSession(sessionId, 'ls -la', agent);
-
-// Retrieve output
-const output = await terminalService.retrieveSessionOutput(sessionId, agent);
-
-// Terminate session
-await terminalService.terminateSession(sessionId, agent);
-```
-
-## Configuration
-
-### ACP Configuration
-
-Configure the ACP service through the plugin or programmatic registration:
-
-```typescript
-import { ACPConfigSchema } from '@tokenring-ai/acp';
-
-const config = ACPConfigSchema.parse({
-  transport: 'stdio',
-  defaultAgentType: 'coder'
-});
-```
-
-### Working Directory
-
-All sessions require an absolute path working directory. Relative paths are rejected:
-
-```typescript
-// Valid - absolute path
-await acpConnection.newSession({ cwd: '/home/user/project' });
-
-// Invalid - relative path (throws error)
-await acpConnection.newSession({ cwd: './project' }); // Error: ACP session cwd must be an absolute path
-```
-
-### Path Sandboxing
-
-File operations are sandboxed to the session's working directory:
-
-```typescript
-// Within session with cwd '/home/user/project'
-await fileSystemService.readTextFile('./src/index.ts', agent); // Valid - resolves to /home/user/project/src/index.ts
-await fileSystemService.readTextFile('../config.json', agent); // Invalid - outside root directory
 ```
 
 ## Integration
@@ -300,22 +316,23 @@ const agent = session.agent;
 
 ### With FileSystemService
 
-The ACP service patches the FileSystemService to route operations through the ACP client when capabilities are available:
+The ACP service registers an `ACPFileSystemProvider` with the FileSystemService when the ACP client supports file
+capabilities:
 
 ```typescript
-// FileSystemService patching occurs automatically on service start
-// File operations are routed through ACP if client supports the capability
-// Falls back to local filesystem if client doesn't support the capability
+// ACPFileSystemProvider is registered automatically when client capabilities are detected
+// File operations are routed through ACP if client supports readTextFile/writeTextFile
+// Falls back to other providers if ACP client doesn't support the capability
 ```
 
 ### With TerminalService
 
-The ACP service patches the TerminalService to route terminal operations through the ACP client:
+The ACP service registers an `ACPTerminalProvider` with the TerminalService when the ACP client supports terminal
+capabilities:
 
 ```typescript
-// TerminalService patching occurs automatically on service start
+// ACPTerminalProvider is registered automatically when client capabilities are detected
 // Terminal operations are routed through ACP if client supports terminal capability
-// Falls back to local terminal if client doesn't support the capability
 ```
 
 ### With AgentEventState
@@ -324,34 +341,26 @@ The ACP service integrates with agent event state for streaming responses:
 
 ```typescript
 // Event types forwarded to ACP client
-- 'output.chat': Chat messages
-- 'output.reasoning': Reasoning/thought content
-- 'output.info': Informational messages
-- 'output.warning': Warnings
-- 'output.error': Errors
-- 'output.artifact': File attachments/artifacts
+// - 'output.chat': Chat messages
+// - 'output.reasoning': Reasoning/thought content
+// - 'output.info': Informational messages
+// - 'output.warning': Warnings
+// - 'output.error': Errors
+// - 'output.artifact': File attachments/artifacts
 ```
 
-## RPC Endpoints
+## ACP Protocol Endpoints
 
-The ACP service implements the following ACP protocol endpoints through the AgentSideConnection:
+The ACP service implements the following ACP protocol methods through the AgentSideConnection:
 
-| Endpoint | Request | Response | Description |
-|----------|---------|----------|-------------|
-| `initialize` | `InitializeRequest` | `InitializeResponse` | Initialize ACP connection with client capabilities |
-| `authenticate` | `AuthenticateRequest` | `AuthenticateResponse` | Authentication (currently no-op) |
-| `newSession` | `NewSessionRequest` | `NewSessionResponse` | Create new agent session |
-| `listSessions` | `ListSessionsRequest` | `ListSessionsResponse` | List active sessions |
-| `prompt` | `PromptRequest` | `PromptResponse` | Send prompt and stream response |
-| `cancel` | `CancelNotification` | `void` | Cancel active prompt |
-| `sessionUpdate` | `SessionUpdate` | `void` | Send session updates (file/terminal operations) |
-| `readTextFile` | `ReadTextFileRequest` | `ReadTextFileResponse` | Read file through ACP client |
-| `writeTextFile` | `WriteTextFileRequest` | `WriteTextFileResponse` | Write file through ACP client |
-| `createTerminal` | `CreateTerminalRequest` | `CreateTerminalResponse` | Create terminal through ACP client |
-
-## Chat Commands
-
-The ACP package does not define chat commands directly. Commands are handled through the ACP protocol's prompt mechanism.
+| Endpoint       | Request               | Response               | Description                                        |
+|----------------|-----------------------|------------------------|----------------------------------------------------|
+| `initialize`   | `InitializeRequest`   | `InitializeResponse`   | Initialize ACP connection with client capabilities |
+| `authenticate` | `AuthenticateRequest` | `AuthenticateResponse` | Authentication (currently no-op)                   |
+| `newSession`   | `NewSessionRequest`   | `NewSessionResponse`   | Create new agent session                           |
+| `listSessions` | `ListSessionsRequest` | `ListSessionsResponse` | List active sessions                               |
+| `prompt`       | `PromptRequest`       | `PromptResponse`       | Send prompt and stream response                    |
+| `cancel`       | `CancelNotification`  | `void`                 | Cancel active prompt                               |
 
 ## State Management
 
@@ -366,6 +375,9 @@ type ACPSession = {
   agent: TokenRingAgent;       // Agent instance for this session
   activePrompt: ACPPromptState | null; // Current active prompt state
   updatedAt: string;           // Last update timestamp
+  fileSystemProviderName?: string;     // Registered file system provider name
+  terminalProvider?: ACPTerminalProvider; // Terminal provider instance
+  terminalProviderName?: string;         // Registered terminal provider name
 };
 ```
 
@@ -376,20 +388,6 @@ ACP sessions integrate with agent state slices:
 - `FileSystemState`: Working directory and file system configuration
 - `TerminalState`: Terminal session management and output tracking
 - `AgentEventState`: Event cursor and streaming state
-
-### State Persistence
-
-Session state is persisted through the agent's state management system:
-
-```typescript
-// File system state
-const fsState = agent.getState(FileSystemState);
-const workingDirectory = fsState.workingDirectory;
-
-// Terminal state
-const terminalState = agent.getState(TerminalState);
-const session = terminalState.getSession(terminalId);
-```
 
 ## Testing and Development
 
@@ -438,13 +436,17 @@ MIT License - see LICENSE file for details.
 4. **Capability Detection**: Check client capabilities before relying on file/terminal operations
 5. **Error Handling**: Implement proper error handling for ACP protocol operations
 6. **Timeout Management**: Use appropriate timeouts for long-running terminal operations
-7. **State Management**: Leverage agent state slices for persistent session data
 
 ## Development Notes
 
-### Service Patching
+### Session Providers
 
-The ACP service patches FileSystemService and TerminalService at startup to intercept operations and route them through the ACP client when capabilities are available. This patching occurs only once per service instance.
+The ACP service registers file system and terminal providers with the respective TokenRing services when the ACP client
+advertises the corresponding capabilities:
+
+- `ACPFileSystemProvider`: Registered with `FileSystemService` when client supports `fs.readTextFile` or
+  `fs.writeTextFile`
+- `ACPTerminalProvider`: Registered with `TerminalService` when client supports `terminal`
 
 ### Event Forwarding
 
@@ -459,8 +461,8 @@ Agent events are forwarded to the ACP client in real-time:
 Tool approvals are handled through the ACP client's permission system:
 
 - `askForApproval`: Prompts client for tool approval
-- `askForText`: Not supported in ACP mode
-- `askQuestion`: Not supported in ACP mode
+- `askForText`: Not supported in ACP mode (throws error)
+- `askQuestion`: Not supported in ACP mode (throws error)
 
 ### Session Cleanup
 
