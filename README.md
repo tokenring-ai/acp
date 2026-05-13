@@ -30,10 +30,10 @@ bun add @tokenring-ai/acp
 ## Dependencies
 
 - `@agentclientprotocol/sdk`: ^0.18.0 - Agent Client Protocol SDK
-- `@tokenring-ai/agent`: 0.2.0 - Agent orchestration
-- `@tokenring-ai/app`: 0.2.0 - Base application framework
-- `@tokenring-ai/filesystem`: 0.2.0 - File system service
-- `@tokenring-ai/terminal`: 0.2.0 - Terminal service
+- `@tokenring-ai/agent`: workspace:* - Agent orchestration
+- `@tokenring-ai/app`: workspace:* - Base application framework
+- `@tokenring-ai/filesystem`: workspace:* - File system service
+- `@tokenring-ai/terminal`: workspace:* - Terminal service
 - `zod`: ^4.3.6 - Schema validation
 
 ## Chat Commands
@@ -89,7 +89,7 @@ await app.start();
 
 ```typescript
 import TokenRingApp from '@tokenring-ai/app';
-import { ACPService, ACPConfigSchema } from '@tokenring-ai/acp';
+import {ACPService, ACPConfigSchema} from '@tokenring-ai/acp';
 
 const app = new TokenRingApp();
 const config = ACPConfigSchema.parse({
@@ -102,6 +102,21 @@ await app.start();
 // ACP connection runs via stdio
 const signal = AbortSignal.timeout(30000);
 await app.run(signal);
+```
+
+## Exports
+
+The package exports the following:
+
+```typescript
+// Main service
+export { default as ACPService } from "./ACPService.ts";
+
+// Configuration schema
+export { ACPConfigSchema } from "./schema.ts";
+
+// Plugin for easy integration
+// import acpPlugin from '@tokenring-ai/acp/plugin';
 ```
 
 ## Core Components
@@ -422,11 +437,17 @@ MIT License - see LICENSE file for details.
 
 ## Related Components
 
+### Core Dependencies
+
 - `@tokenring-ai/agent`: Agent orchestration and management
 - `@tokenring-ai/app`: Base application framework
 - `@tokenring-ai/filesystem`: File system service
 - `@tokenring-ai/terminal`: Terminal service
+
+### External Dependencies
+
 - `@agentclientprotocol/sdk`: Agent Client Protocol SDK
+- `zod`: Schema validation
 
 ## Best Practices
 

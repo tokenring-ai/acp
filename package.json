@@ -4,10 +4,10 @@
   "description": "Agent Client Protocol (ACP) integration for TokenRing agents, enabling stdio-based communication with ACP-compatible clients.",
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.18.0",
-    "@tokenring-ai/agent": "0.2.0",
-    "@tokenring-ai/app": "0.2.0",
-    "@tokenring-ai/filesystem": "0.2.0",
-    "@tokenring-ai/terminal": "0.2.0",
+    "@tokenring-ai/agent": "workspace:*",
+    "@tokenring-ai/app": "workspace:*",
+    "@tokenring-ai/filesystem": "workspace:*",
+    "@tokenring-ai/terminal": "workspace:*",
     "zod": "^4.3.6"
   },
   "exports": {

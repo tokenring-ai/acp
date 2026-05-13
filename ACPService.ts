@@ -84,7 +84,7 @@ export default class ACPService implements TokenRingService {
     }
 
     const output = Writable.toWeb(process.stdout);
-    const input = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
+    const input = Readable.toWeb(process.stdin) as unknown as ReadableStream<Uint8Array>;
     const stream = ndJsonStream(output, input);
 
     this.connection = new AgentSideConnection(connection => new TokenRingACPAgent(connection, this), stream);
