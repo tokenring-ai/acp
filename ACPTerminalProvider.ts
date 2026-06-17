@@ -1,5 +1,3 @@
-import process from "node:process";
-import { setTimeout as delay } from "node:timers/promises";
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 import type {
   ExecuteCommandOptions,
@@ -7,6 +5,8 @@ import type {
   NonInteractiveTerminalProvider,
   TerminalIsolationLevel,
 } from "@tokenring-ai/terminal/TerminalProvider";
+import process from "node:process";
+import { setTimeout as delay } from "node:timers/promises";
 
 export default class ACPTerminalProvider implements NonInteractiveTerminalProvider {
   readonly isInteractive = false;

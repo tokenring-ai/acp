@@ -1,7 +1,3 @@
-import { randomUUID } from "node:crypto";
-import path from "node:path";
-import process from "node:process";
-import { Readable, Writable } from "node:stream";
 import {
   type Agent as ACPAgent,
   type AgentCapabilities,
@@ -16,12 +12,12 @@ import {
   type InitializeResponse,
   type ListSessionsRequest,
   type ListSessionsResponse,
+  ndJsonStream,
   type NewSessionRequest,
   type NewSessionResponse,
-  ndJsonStream,
-  PROTOCOL_VERSION,
   type PromptRequest,
   type PromptResponse,
+  PROTOCOL_VERSION,
   RequestError,
   type SessionInfo,
 } from "@agentclientprotocol/sdk";
@@ -34,6 +30,10 @@ import type TokenRingApp from "@tokenring-ai/app";
 import type { TokenRingService } from "@tokenring-ai/app/types";
 import FileSystemService from "@tokenring-ai/filesystem/FileSystemService";
 import TerminalService from "@tokenring-ai/terminal/TerminalService";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
+import process from "node:process";
+import { Readable, Writable } from "node:stream";
 import ACPFileSystemProvider from "./ACPFileSystemProvider.ts";
 import ACPTerminalProvider from "./ACPTerminalProvider.ts";
 import packageJSON from "./package.json" with { type: "json" };

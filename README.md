@@ -6,6 +6,8 @@ The `@tokenring-ai/acp` package provides Agent Client Protocol (ACP) integration
 
 This package serves as a bridge between TokenRing's agent ecosystem and the broader Agent Client Protocol ecosystem, allowing external ACP clients to create sessions, execute commands, manage files, and interact with AI agents in a standardized way.
 
+**Package Version**: 0.2.0
+
 ## Key Features
 
 - **ACP Protocol Implementation**: Full implementation of the Agent Client Protocol specification
@@ -58,7 +60,7 @@ The package defines two schemas:
 ```typescript
 export const ACPConfigSchema = z.object({
   transport: z.literal('stdio').default('stdio'),
-  defaultAgentType: z.string().optional(),
+  defaultAgentType: z.string().exactOptional(),
 });
 
 export type ACPConfig = z.output<typeof ACPConfigSchema>;
@@ -405,6 +407,11 @@ Runs the ACP service until the connection is closed or signal is aborted.
 
 **Note**: This method must be called to start the ACP connection. It blocks until the connection closes.
 
+**Behavior**:
+
+- Waits for either the connection to close or the signal to be aborted
+- If not aborted, calls `app.shutdown("ACP connection closed")` to gracefully shut down the application
+
 ##### `stop(): void`
 
 Stops the ACP service and cleans up all sessions.
@@ -424,7 +431,7 @@ Internal class that implements the ACP `Agent` interface and delegates to `ACPSe
 **Methods**:
 
 - `initialize`: Delegates to `ACPService.initialize`
-- `authenticate`: No-op authentication
+- `authenticate`: No-op authentication (returns empty response)
 - `newSession`: Delegates to `ACPService.createSession`
 - `listSessions`: Delegates to `ACPService.listSessions`
 - `prompt`: Delegates to `ACPService.prompt`
@@ -473,6 +480,7 @@ File system provider that routes file operations through the ACP connection.
 - `stat` always returns `isFile: true` and `isDirectory: false` (no directory support)
 - `appendFile` reads the current content, then writes the combined content
 - All file paths are passed directly to the ACP client (no path validation in provider)
+- Uses `toTextContent` helper to convert string or Buffer content to UTF-8 string for file operations
 
 #### ACPTerminalProvider
 
@@ -510,7 +518,7 @@ Terminal provider that routes terminal operations through the ACP connection.
   - `unknownError`: An error occurred during execution
 - Truncates output if it exceeds ACP client limits (indicated by `[...Terminal output truncated by ACP client...]`)
 - Automatically releases terminal handle after execution in `finally` block
-- Uses `process.env.SHELL` or `/bin/bash` with `-lc` flags for `runScript`
+- `runScript` uses `process.env.SHELL` or `/bin/bash` with `-lc` flags to execute shell scripts
 
 ### ACP Protocol Endpoints
 
@@ -585,6 +593,64 @@ ACP sessions integrate with the following agent state slices:
   - Allows resuming event streaming from the last position
 
 **Note**: The ACP service does not directly manage `FileSystemState` or `TerminalState`. These are configured on the agent during session creation with the session's working directory.
+
+### Helper Functions
+
+#### ACPService Helper Functions
+
+The ACPService module includes several helper functions for content conversion and event handling:
+
+**`convertPromptToAgentInput(prompt: ContentBlock[]): { message: string; attachments: InputAttachment[] }`**
+
+Converts ACP prompt content blocks to TokenRing agent input format.
+
+- Processes text blocks, resource links, resources, images, and audio
+- Joins text parts with double newlines
+- Converts attachments with appropriate encoding (base64 for images/audio, text for resources, href for resource links)
+
+**`convertEmbeddedResourceToAttachment(block: EmbeddedResource): InputAttachment`**
+
+Converts an ACP embedded resource to a TokenRing attachment.
+
+- Handles both text and binary resources
+- Uses text encoding for text resources, base64 for binary resources
+
+**`convertArtifactToContentBlock(event: AgentEventEnvelope): ContentBlock`**
+
+Converts an agent artifact event to an ACP content block.
+
+- Creates resource content blocks with artifact URIs
+- Handles both text and binary artifacts
+
+**`getAttachmentName(uri: string | null | undefined, fallback: string): string`**
+
+Extracts a filename from a URI for use as an attachment name.
+
+- Parses URI to get last path component
+- Returns fallback if URI is invalid or empty
+
+**`waitForAbort(signal: AbortSignal): Promise<void>`**
+
+Creates a promise that resolves when the abort signal is triggered.
+
+- Returns immediately if signal is already aborted
+- Otherwise waits for the abort event
+
+**`asRecord(value: unknown): Record<string, unknown>`**
+
+Safely converts a value to a record object.
+
+- Returns empty object if value is not a plain object
+- Spreads object properties to create a copy
+
+#### ACPFileSystemProvider Helper Functions
+
+**`toTextContent(content: string | Buffer): string`**
+
+Converts string or Buffer content to a UTF-8 string for file operations.
+
+- Returns string as-is if already a string
+- Converts Buffer to UTF-8 string using `toString('utf-8')`
 
 ## Testing and Development
 
